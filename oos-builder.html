@@ -562,6 +562,7 @@ function renderForm(){
   col.innerHTML = '';
   SECTIONS.forEach((sec, i) => {
     const wrap = document.createElement('div');
+    wrap.id = 'section-' + sec.id;
     wrap.className = 'section' + (openSection === sec.id ? ' open' : '');
     const confirmed = !!state[sec.id + '_confirmed'];
 
@@ -571,7 +572,15 @@ function renderForm(){
       <h2>${sec.title}</h2>
       <span class="section-dot ${confirmed ? 'done' : ''}"></span>
       <span class="chevron">\u25B8</span>`;
-    head.onclick = () => { openSection = (openSection === sec.id ? null : sec.id); renderForm(); };
+    head.onclick = () => {
+      const opening = openSection !== sec.id;
+      openSection = opening ? sec.id : null;
+      renderForm();
+      if (opening){
+        const target = document.getElementById('section-' + sec.id);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
     wrap.appendChild(head);
 
     const body = document.createElement('div');
