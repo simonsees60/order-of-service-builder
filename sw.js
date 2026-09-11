@@ -1,4 +1,4 @@
-const CACHE_NAME = 'oos-builder-v2';
+const CACHE_NAME = 'oos-builder-v3';
 const ASSETS = [
   './',
   './oos-builder.html',
@@ -37,6 +37,26 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  // The app shell (the page itself) must always prefer a fresh copy when
+  // online, or updates would never show up -- a cached copy only exists as
+  // the offline fallback. Static assets (fonts, icons) never change, so
+  // they stay cache-first below to avoid needless refetching.
+  const isAppShell = event.request.mode === 'navigate' || event.request.url.endsWith('/oos-builder.html');
+
+  if (isAppShell){
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
