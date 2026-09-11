@@ -178,22 +178,49 @@
   .order-list{list-style:none;margin:0;padding:0;counter-reset:step;}
   .order-item{
     display:flex;
+    align-items:center;
     gap:10px;
     padding:10px 0;
     border-bottom:1px solid var(--line);
+    background:var(--card);
   }
   .order-item:last-child{border-bottom:none;}
+  .order-item.dragging{opacity:.5;}
   .order-idx{
     font-family:'Fraunces',serif;
     color:var(--rose-deep);
     font-size:13px;
     width:18px;
     flex-shrink:0;
+    align-self:flex-start;
     padding-top:1px;
   }
+  .order-main{flex:1;min-width:0;}
   .order-main strong{display:block;font-size:14px;}
   .order-main span{font-size:12.5px;color:var(--ink-soft);}
   .placeholder-tag{color:var(--todo);font-style:italic;}
+  .order-controls{display:flex;align-items:center;gap:2px;flex-shrink:0;}
+  .order-btn{
+    background:none;
+    border:none;
+    color:var(--ink-soft);
+    font-size:15px;
+    line-height:1;
+    padding:6px 5px;
+    cursor:pointer;
+    border-radius:5px;
+  }
+  .order-btn:hover{background:var(--paper);}
+  .order-btn:disabled{opacity:.25;cursor:default;}
+  .order-btn:disabled:hover{background:none;}
+  .drag-handle{
+    font-size:16px;
+    color:var(--ink-soft);
+    padding:6px 4px;
+    cursor:grab;
+    touch-action:none;
+    user-select:none;
+  }
 
   .progress-wrap{margin-bottom:14px;}
   .progress-bar{height:6px;background:var(--line);border-radius:4px;overflow:hidden;}
@@ -431,62 +458,162 @@ function parseSpeakers(){
   });
 }
 
-function item(label, detail, placeholder){
+function item(key, label, detail, placeholder){
   const hasDetail = detail && detail.trim();
-  return { label, detail: hasDetail ? detail : (placeholder ? placeholder : ''), missing: !hasDetail };
+  return { key, label, detail: hasDetail ? detail : (placeholder ? placeholder : ''), missing: !hasDetail };
+}
+
+function buildOrderRows(){
+  const rows = [];
+
+  rows.push(item('prelude', 'Prelude', state.preludeSong, '[Prelude song TBD]'));
+  rows.push(item('openingSong', 'Opening song', state.openingSong, '[Opening song TBD]'));
+  if (state.candleLighting && !state.wantsDifferentRitual){
+    rows.push(item('candleLighting', 'Candle lighting', state.candleWho ? 'Lit by ' + state.candleWho : '', '[Who lights the candle?]'));
+  }
+  if (state.wantsDifferentRitual){
+    rows.push(item('openingRitual', 'Opening ritual (in place of candle lighting)', state.otherRitual, '[What does the family want instead?]'));
+  }
+  rows.push(item('welcome', 'Welcome', 'Simon Ratcliffe'));
+
+  const speakers = parseSpeakers();
+  if (speakers.length){
+    speakers.forEach((s, i) => {
+      rows.push(item('eulogy:' + i, 'Eulogy / remarks', [s.name, s.relationship, s.topic].filter(Boolean).join(' \u2013 ')));
+    });
+  } else {
+    rows.push(item('eulogy:default', 'Eulogy / remarks', '', '[Speakers not yet confirmed]'));
+  }
+
+  if (state.interludeSong){
+    rows.push(item('interlude', 'Musical interlude', state.interludeSong));
+  }
+
+  let readingLabel = state.readingChoice === 'Other' ? state.readingOther : state.readingChoice;
+  rows.push(item('reading', 'Reflection & reading', readingLabel, '[Reading not yet chosen]'));
+
+  if (state.roseCeremony){
+    rows.push(item('roseCeremony', 'Rose ceremony', state.roseWho ? 'Placed by ' + state.roseWho : '', '[Who places the roses?]'));
+  }
+  if (state.slideshow){
+    rows.push(item('slideshow', 'Photo slideshow', ''));
+  }
+
+  rows.push(item('finalThoughts', 'Final thoughts & blessing', 'Simon Ratcliffe'));
+  rows.push(item('closingSong', 'Closing song', state.closingSong, '[Closing song TBD]'));
+
+  return rows;
+}
+
+// Keeps whatever custom order the celebrant has dragged items into, but slots
+// any newly-appearing item (e.g. a ritual just ticked on) in next to its
+// nearest already-placed neighbour from the default running order, rather
+// than always dumping it at the end.
+function reconcileOrder(rows){
+  const activeKeys = rows.map(r => r.key);
+  const byKey = {};
+  rows.forEach(r => byKey[r.key] = r);
+
+  let seq = Array.isArray(state.orderSequence) ? state.orderSequence.filter(k => activeKeys.includes(k)) : [];
+  const missing = activeKeys.filter(k => !seq.includes(k));
+
+  missing.forEach(key => {
+    const baseIdx = activeKeys.indexOf(key);
+    let insertAfter = -1;
+    for (let i = baseIdx - 1; i >= 0; i--){
+      const pos = seq.indexOf(activeKeys[i]);
+      if (pos !== -1){ insertAfter = pos; break; }
+    }
+    seq.splice(insertAfter + 1, 0, key);
+  });
+
+  state.orderSequence = seq;
+  return seq.map(k => byKey[k]);
+}
+
+function moveOrderItem(key, dir){
+  const seq = state.orderSequence || [];
+  const idx = seq.indexOf(key);
+  const swapWith = dir === 'up' ? idx - 1 : idx + 1;
+  if (idx === -1 || swapWith < 0 || swapWith >= seq.length) return;
+  [seq[idx], seq[swapWith]] = [seq[swapWith], seq[idx]];
+  save();
+  renderOrder();
 }
 
 function renderOrder(){
   const list = document.getElementById('orderList');
   list.innerHTML = '';
-  const rows = [];
-
-  rows.push(item('Prelude', state.preludeSong, '[Prelude song TBD]'));
-  rows.push(item('Opening song', state.openingSong, '[Opening song TBD]'));
-  if (state.candleLighting && !state.wantsDifferentRitual){
-    rows.push(item('Candle lighting', state.candleWho ? 'Lit by ' + state.candleWho : '', '[Who lights the candle?]'));
-  }
-  if (state.wantsDifferentRitual){
-    rows.push(item('Opening ritual (in place of candle lighting)', state.otherRitual, '[What does the family want instead?]'));
-  }
-  rows.push(item('Welcome', 'Simon Ratcliffe'));
-
-  const speakers = parseSpeakers();
-  if (speakers.length){
-    speakers.forEach(s => {
-      rows.push(item('Eulogy / remarks', [s.name, s.relationship, s.topic].filter(Boolean).join(' \u2013 ')));
-    });
-  } else {
-    rows.push(item('Eulogy / remarks', '', '[Speakers not yet confirmed]'));
-  }
-
-  if (state.interludeSong){
-    rows.push(item('Musical interlude', state.interludeSong));
-  }
-
-  let readingLabel = state.readingChoice === 'Other' ? state.readingOther : state.readingChoice;
-  rows.push(item('Reflection & reading', readingLabel, '[Reading not yet chosen]'));
-
-  if (state.roseCeremony){
-    rows.push(item('Rose ceremony', state.roseWho ? 'Placed by ' + state.roseWho : '', '[Who places the roses?]'));
-  }
-  if (state.slideshow){
-    rows.push(item('Photo slideshow', ''));
-  }
-
-  rows.push(item('Final thoughts & blessing', 'Simon Ratcliffe'));
-  rows.push(item('Closing song', state.closingSong, '[Closing song TBD]'));
+  const rows = reconcileOrder(buildOrderRows());
 
   rows.forEach((r, i) => {
     const li = document.createElement('li');
     li.className = 'order-item';
+    li.dataset.key = r.key;
     li.innerHTML = `<span class="order-idx">${i+1}</span>
       <div class="order-main">
         <strong>${r.label}</strong>
         <span class="${r.missing ? 'placeholder-tag' : ''}">${r.detail || ''}</span>
+      </div>
+      <div class="order-controls">
+        <button type="button" class="order-btn" data-dir="up" aria-label="Move up" ${i === 0 ? 'disabled' : ''}>\u25b4</button>
+        <button type="button" class="order-btn" data-dir="down" aria-label="Move down" ${i === rows.length - 1 ? 'disabled' : ''}>\u25be</button>
+        <span class="drag-handle" aria-label="Drag to reorder">\u2630</span>
       </div>`;
     list.appendChild(li);
   });
+
+  attachOrderInteractions(list);
+}
+
+function attachOrderInteractions(list){
+  list.querySelectorAll('.order-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const li = btn.closest('.order-item');
+      moveOrderItem(li.dataset.key, btn.dataset.dir);
+    };
+  });
+
+  let dragEl = null;
+
+  list.querySelectorAll('.drag-handle').forEach(handle => {
+    handle.addEventListener('pointerdown', (e) => {
+      dragEl = handle.closest('.order-item');
+      dragEl.classList.add('dragging');
+      handle.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+  });
+
+  function onMove(e){
+    if (!dragEl) return;
+    const pointerY = e.clientY;
+    const siblings = Array.from(list.querySelectorAll('.order-item')).filter(li => li !== dragEl);
+    let placed = false;
+    for (const sib of siblings){
+      const rect = sib.getBoundingClientRect();
+      if (pointerY < rect.top + rect.height / 2){
+        list.insertBefore(dragEl, sib);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) list.appendChild(dragEl);
+  }
+
+  function endDrag(){
+    if (!dragEl) return;
+    dragEl.classList.remove('dragging');
+    state.orderSequence = Array.from(list.querySelectorAll('.order-item')).map(li => li.dataset.key);
+    dragEl = null;
+    save();
+    renderOrder();
+  }
+
+  list.addEventListener('pointermove', onMove);
+  list.addEventListener('pointerup', endDrag);
+  list.addEventListener('pointercancel', endDrag);
 }
 
 function renderChecklist(){
