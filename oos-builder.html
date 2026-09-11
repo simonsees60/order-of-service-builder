@@ -161,6 +161,24 @@
   textarea{resize:vertical;min-height:56px;}
   input:focus, textarea:focus, select:focus{outline:none;border-color:var(--rose);}
   .hint{font-size:11.5px;color:var(--ink-soft);margin-top:3px;}
+  .photo-field{display:flex;gap:12px;align-items:flex-start;}
+  .photo-preview{
+    width:96px;height:96px;flex-shrink:0;
+    border:1px dashed var(--line);border-radius:8px;
+    background:var(--paper);
+    display:flex;align-items:center;justify-content:center;
+    text-align:center;font-size:11px;color:var(--ink-soft);
+    overflow:hidden;
+  }
+  .photo-preview img{width:100%;height:100%;object-fit:cover;}
+  .photo-btn-row{display:flex;flex-direction:column;gap:6px;}
+  .photo-btn{
+    background:transparent;border:1px solid var(--line);color:var(--ink-soft);
+    border-radius:6px;padding:7px 12px;font-size:12.5px;cursor:pointer;
+    font-family:'Work Sans',sans-serif;
+  }
+  .photo-remove{color:var(--todo);border-color:var(--todo);}
+  .photo-status{font-size:11.5px;color:var(--todo);margin-top:4px;}
   .check-row{display:flex;align-items:center;gap:8px;margin-top:12px;}
   .check-row input{width:16px;height:16px;}
   .check-row label{margin:0;font-size:13.5px;color:var(--ink);}
@@ -336,6 +354,7 @@
 <script>
 const SECTIONS = [
   { id:'basics', title:'Basics', confirmLabel:'Basic service details confirmed', fields:[
+    {id:'photo', label:'Photo', type:'photo', hint:'Upload a file or take one with the camera.'},
     {id:'fullName', label:'Full name', type:'text'},
     {id:'preferredName', label:'Preferred name / what family calls them', type:'text'},
     {id:'birthDate', label:'Date of birth', type:'text'},
@@ -403,6 +422,7 @@ const OLD_STORAGE_KEY = 'oos-builder-current';
 const INDEX_KEY = 'oos-index';
 const CURRENT_ID_KEY = 'oos-current-id';
 const familyKey = (id) => 'oos-family:' + id;
+const photoKey = (id) => 'oos-photo:' + id;
 
 function newId(){
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -438,6 +458,94 @@ function relativeTime(ts){
   if (hrs < 24) return hrs + (hrs === 1 ? ' hour ago' : ' hours ago');
   const days = Math.round(hrs / 24);
   return days + (days === 1 ? ' day ago' : ' days ago');
+}
+
+function resizeImage(file, maxDim, quality){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim){
+          if (width > height){ height = Math.round(height * (maxDim / width)); width = maxDim; }
+          else { width = Math.round(width * (maxDim / height)); height = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('Could not read that image'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('Could not read that file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderPhotoField(){
+  const wrap = document.createElement('div');
+  wrap.className = 'photo-field';
+
+  const preview = document.createElement('div');
+  preview.className = 'photo-preview';
+  if (state.photo){
+    const img = document.createElement('img');
+    img.src = state.photo;
+    preview.appendChild(img);
+  } else {
+    preview.textContent = 'No photo yet';
+  }
+  wrap.appendChild(preview);
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/*';
+  fileInput.hidden = true;
+
+  const status = document.createElement('div');
+  status.className = 'photo-status';
+
+  fileInput.onchange = () => {
+    const file = fileInput.files[0];
+    fileInput.value = '';
+    if (!file) return;
+    resizeImage(file, 900, 0.82).then(dataUrl => {
+      state.photo = dataUrl;
+      save();
+      renderForm();
+    }).catch(() => {
+      status.textContent = "Couldn't use that photo — try a different one.";
+      setTimeout(() => status.textContent = '', 4000);
+    });
+  };
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'photo-btn-row';
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'photo-btn';
+  addBtn.textContent = state.photo ? 'Replace photo' : 'Add photo';
+  addBtn.onclick = () => fileInput.click();
+  btnRow.appendChild(addBtn);
+
+  if (state.photo){
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'photo-btn photo-remove';
+    removeBtn.textContent = 'Remove';
+    removeBtn.onclick = () => { delete state.photo; save(); renderForm(); };
+    btnRow.appendChild(removeBtn);
+  }
+
+  const controls = document.createElement('div');
+  controls.appendChild(fileInput);
+  controls.appendChild(btnRow);
+  controls.appendChild(status);
+  wrap.appendChild(controls);
+  return wrap;
 }
 
 function renderForm(){
@@ -477,6 +585,18 @@ function renderForm(){
         l2.textContent = f.label;
         row.appendChild(inp); row.appendChild(l2);
         body.appendChild(row);
+        return;
+      }
+
+      if (f.type === 'photo'){
+        body.appendChild(lbl);
+        body.appendChild(renderPhotoField());
+        if (f.hint){
+          const h = document.createElement('div');
+          h.className = 'hint';
+          h.textContent = f.hint;
+          body.appendChild(h);
+        }
         return;
       }
 
@@ -720,6 +840,7 @@ function compileText(){
   SECTIONS.forEach(sec => {
     out += `${sec.title.toUpperCase()}\n`;
     sec.fields.forEach(f => {
+      if (f.type === 'photo') return;
       let val = state[f.id];
       if (f.type === 'checkbox') val = val ? 'Yes' : 'No';
       out += `${f.label}: ${val || '(not provided)'}\n`;
@@ -776,11 +897,35 @@ document.querySelectorAll('.tab').forEach(tab => {
 
 function persistCurrentFamily(){
   if (!currentId) return;
+  // The photo is stored under its own key, separate from the text fields below.
+  // That way, if a large photo ever pushes the device's storage quota over the
+  // edge, the text autosave still succeeds instead of silently failing too.
+  const { photo, ...rest } = state;
   try {
-    localStorage.setItem(familyKey(currentId), JSON.stringify(state));
+    localStorage.setItem(familyKey(currentId), JSON.stringify(rest));
     localStorage.setItem(CURRENT_ID_KEY, currentId);
   } catch(e){}
-  upsertIndexEntry(currentId, state.fullName);
+  if (photo){
+    try { localStorage.setItem(photoKey(currentId), photo); }
+    catch(e){ notePhotoSaveFailed(); }
+  } else {
+    try { localStorage.removeItem(photoKey(currentId)); } catch(e){}
+  }
+  upsertIndexEntry(currentId, rest.fullName);
+}
+
+function notePhotoSaveFailed(){
+  const note = document.getElementById('savedNote');
+  if (!note) return;
+  note.textContent = "Couldn't save the photo — device storage may be full.";
+  setTimeout(() => { if (note.textContent.startsWith("Couldn't save the photo")) note.textContent = ''; }, 5000);
+}
+
+function attachPhoto(id){
+  try {
+    const p = localStorage.getItem(photoKey(id));
+    if (p) state.photo = p;
+  } catch(e){}
 }
 
 let saveTimer;
@@ -808,6 +953,7 @@ function openFamily(id){
   if (!raw) return;
   flushSave();
   try { state = JSON.parse(raw); } catch(e){ state = {}; }
+  attachPhoto(id);
   currentId = id;
   try { localStorage.setItem(CURRENT_ID_KEY, currentId); } catch(e){}
   openSection = 'basics';
@@ -818,6 +964,7 @@ function openFamily(id){
 
 function deleteFamily(id){
   try { localStorage.removeItem(familyKey(id)); } catch(e){}
+  try { localStorage.removeItem(photoKey(id)); } catch(e){}
   removeIndexEntry(id);
   if (id === currentId){
     currentId = newId();
@@ -864,6 +1011,7 @@ function load(){
   currentId = localStorage.getItem(CURRENT_ID_KEY);
   if (currentId && localStorage.getItem(familyKey(currentId))){
     try { state = JSON.parse(localStorage.getItem(familyKey(currentId))); } catch(e){ state = {}; }
+    attachPhoto(currentId);
   } else {
     // No current family yet -- migrate an older single-draft save if one exists, so nothing is lost.
     let migrated = null;
