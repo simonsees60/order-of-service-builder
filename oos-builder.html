@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Order of Service Builder</title>
+
+<!-- Home screen / standalone app support (iOS + Android) -->
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="OoS Builder">
+<meta name="theme-color" content="#8A4E62">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-512.png">
+
+<link href="fonts.css" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F5F1E9;
+    --ink:#2B2926;
+    --ink-soft:#635E57;
+    --rose:#A9647A;
+    --rose-deep:#8A4E62;
+    --sage:#6E7A6B;
+    --line:#DAD3C6;
+    --card:#FCFAF6;
+    --done:#6E7A6B;
+    --todo:#B85C4A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Work Sans',sans-serif;
+    font-size:15px;
+    line-height:1.5;
+  }
+  h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;margin:0;}
+  .shell{display:flex;flex-direction:column;min-height:100vh;}
+  header{
+    padding:20px 24px 16px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    flex-wrap:wrap;
+    align-items:baseline;
+    gap:12px 20px;
+  }
+  header h1{font-size:22px;color:var(--rose-deep);}
+  header .sub{color:var(--ink-soft);font-size:13px;flex:1;}
+  header input#deceasedName{
+    font-family:'Fraunces',serif;
+    font-size:16px;
+    border:none;
+    border-bottom:1px solid var(--line);
+    background:transparent;
+    padding:4px 2px;
+    min-width:220px;
+    color:var(--ink);
+  }
+  header input#deceasedName:focus{outline:none;border-bottom-color:var(--rose);}
+  .layout{
+    display:flex;
+    flex:1;
+    min-height:0;
+  }
+  @media (max-width: 880px){
+    .layout{flex-direction:column;}
+  }
+  .form-col{
+    flex:1.3;
+    padding:20px 24px 80px;
+    overflow-y:auto;
+  }
+  .preview-col{
+    flex:1;
+    border-left:1px solid var(--line);
+    background:var(--card);
+    padding:20px 24px;
+    overflow-y:auto;
+    position:sticky;
+    top:0;
+    align-self:flex-start;
+    height:100vh;
+  }
+  @media (max-width: 880px){
+    .preview-col{border-left:none;border-top:1px solid var(--line);position:static;height:auto;}
+  }
+  .tabs{display:flex;gap:6px;margin-bottom:16px;}
+  .tab{
+    font-family:'Work Sans',sans-serif;
+    font-size:13px;
+    font-weight:500;
+    padding:7px 14px;
+    border-radius:20px;
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  .tab.active{background:var(--rose);color:#fff;border-color:var(--rose);}
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  .section{
+    border:1px solid var(--line);
+    border-radius:10px;
+    margin-bottom:12px;
+    background:var(--card);
+    overflow:hidden;
+  }
+  .section-head{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:14px 16px;
+    cursor:pointer;
+    user-select:none;
+  }
+  .section-num{
+    font-family:'Fraunces',serif;
+    font-size:13px;
+    color:var(--ink-soft);
+    width:20px;
+  }
+  .section-head h2{font-size:15px;flex:1;}
+  .section-dot{
+    width:9px;height:9px;border-radius:50%;
+    background:var(--line);
+    flex-shrink:0;
+  }
+  .section-dot.done{background:var(--sage);}
+  .chevron{color:var(--ink-soft);font-size:12px;transition:transform .15s;}
+  .section.open .chevron{transform:rotate(90deg);}
+  .section-body{
+    display:none;
+    padding:0 16px 16px;
+    border-top:1px solid var(--line);
+  }
+  .section.open .section-body{display:block;padding-top:14px;}
+
+  label{
+    display:block;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    margin:12px 0 4px;
+  }
+  label:first-child{margin-top:0;}
+  input[type=text], textarea, select{
+    width:100%;
+    font-family:'Work Sans',sans-serif;
+    font-size:14.5px;
+    padding:9px 10px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    background:#fff;
+    color:var(--ink);
+  }
+  textarea{resize:vertical;min-height:56px;}
+  input:focus, textarea:focus, select:focus{outline:none;border-color:var(--rose);}
+  .hint{font-size:11.5px;color:var(--ink-soft);margin-top:3px;}
+  .check-row{display:flex;align-items:center;gap:8px;margin-top:12px;}
+  .check-row input{width:16px;height:16px;}
+  .check-row label{margin:0;font-size:13.5px;color:var(--ink);}
+  .confirm-row{
+    margin-top:16px;
+    padding-top:12px;
+    border-top:1px dashed var(--line);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .confirm-row input{width:17px;height:17px;accent-color:var(--sage);}
+  .confirm-row label{margin:0;font-size:13px;font-weight:500;color:var(--sage);}
+
+  .order-list{list-style:none;margin:0;padding:0;counter-reset:step;}
+  .order-item{
+    display:flex;
+    gap:10px;
+    padding:10px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .order-item:last-child{border-bottom:none;}
+  .order-idx{
+    font-family:'Fraunces',serif;
+    color:var(--rose-deep);
+    font-size:13px;
+    width:18px;
+    flex-shrink:0;
+    padding-top:1px;
+  }
+  .order-main strong{display:block;font-size:14px;}
+  .order-main span{font-size:12.5px;color:var(--ink-soft);}
+  .placeholder-tag{color:var(--todo);font-style:italic;}
+
+  .progress-wrap{margin-bottom:14px;}
+  .progress-bar{height:6px;background:var(--line);border-radius:4px;overflow:hidden;}
+  .progress-fill{height:100%;background:var(--sage);transition:width .2s;}
+  .progress-text{font-size:12px;color:var(--ink-soft);margin-top:5px;}
+
+  .checklist{list-style:none;margin:0;padding:0;}
+  .checklist li{
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    padding:8px 0;
+    border-bottom:1px solid var(--line);
+    font-size:13.5px;
+  }
+  .checklist li:last-child{border-bottom:none;}
+  .ck-icon{width:16px;flex-shrink:0;font-size:13px;padding-top:1px;}
+  .ck-icon.done{color:var(--sage);}
+  .ck-icon.todo{color:var(--todo);}
+  .ck-done-text{color:var(--ink-soft);text-decoration:line-through;}
+
+  .copy-btn, .new-btn{
+    width:100%;
+    padding:11px;
+    border-radius:7px;
+    border:none;
+    font-family:'Work Sans',sans-serif;
+    font-weight:500;
+    font-size:13.5px;
+    cursor:pointer;
+    margin-top:16px;
+  }
+  .copy-btn{background:var(--rose);color:#fff;}
+  .copy-btn:active{background:var(--rose-deep);}
+  .new-btn{background:transparent;border:1px solid var(--line);color:var(--ink-soft);margin-top:8px;}
+  .saved-note{font-size:11px;color:var(--sage);margin-top:8px;text-align:center;height:14px;}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <h1>Order of Service Builder</h1>
+    <input id="deceasedName" placeholder="Who is this service for?">
+    <div class="sub">Fills in live as you talk with the family</div>
+  </header>
+
+  <div class="layout">
+    <div class="form-col" id="formCol"></div>
+
+    <div class="preview-col">
+      <div class="tabs">
+        <button class="tab active" data-panel="order">Order of Service</button>
+        <button class="tab" data-panel="checklist">Still Needed</button>
+      </div>
+
+      <div class="panel active" id="panel-order">
+        <ol class="order-list" id="orderList"></ol>
+      </div>
+
+      <div class="panel" id="panel-checklist">
+        <div class="progress-wrap">
+          <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+          <div class="progress-text" id="progressText"></div>
+        </div>
+        <ul class="checklist" id="checklistUl"></ul>
+      </div>
+
+      <button class="copy-btn" id="copyBtn">Copy for the full script</button>
+      <button class="new-btn" id="newBtn">Save & start next family</button>
+      <div class="saved-note" id="savedNote"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SECTIONS = [
+  { id:'basics', title:'Basics', confirmLabel:'Basic service details confirmed', fields:[
+    {id:'fullName', label:'Full name', type:'text'},
+    {id:'preferredName', label:'Preferred name / what family calls them', type:'text'},
+    {id:'birthDate', label:'Date of birth', type:'text'},
+    {id:'deathDate', label:'Date of death', type:'text'},
+    {id:'age', label:'Age', type:'text'},
+    {id:'serviceDate', label:'Service date', type:'text'},
+    {id:'serviceTime', label:'Service time', type:'text'},
+    {id:'venue', label:'Venue / location', type:'text'},
+  ]},
+  { id:'people', title:'Family & key people', confirmLabel:'Family members confirmed', fields:[
+    {id:'spouseName', label:'Spouse / partner', type:'text'},
+    {id:'childrenNames', label:'Children (names, ages if relevant)', type:'textarea'},
+    {id:'siblingsNames', label:'Siblings / other close family', type:'textarea'},
+    {id:'excludeNames', label:'Anyone to leave out of the service entirely', type:'textarea', hint:'Write "None" if not applicable, so it\u2019s clear you asked.'},
+    {id:'namingNotes', label:'Naming preferences', type:'textarea', hint:'e.g. "goes by Robert, never Bob"'},
+  ]},
+  { id:'faith', title:'Faith & tone', confirmLabel:'Faith & tone discussed', fields:[
+    {id:'faithType', label:'Overall approach', type:'select', options:['','Religious','Secular','Mixed / some tension','Not yet sure']},
+    {id:'tensionNotes', label:'Any differing views to navigate carefully', type:'textarea'},
+  ]},
+  { id:'speakers', title:'Speakers', confirmLabel:'Speaker list confirmed', fields:[
+    {id:'speakers', label:'One per line: Name \u2013 Relationship \u2013 what they\u2019ll speak about', type:'textarea', hint:'e.g. Summer \u2013 spouse \u2013 eulogy'},
+  ]},
+  { id:'life', title:'Life & themes', confirmLabel:'Life story details gathered', fields:[
+    {id:'occupation', label:'Occupation / career', type:'text'},
+    {id:'hobbies', label:'Hobbies, passions, interests', type:'textarea'},
+    {id:'personality', label:'Personality, how people describe them', type:'textarea'},
+    {id:'stories', label:'Notable stories, nicknames, mottos', type:'textarea'},
+  ]},
+  { id:'music', title:'Music', confirmLabel:'Music choices confirmed', fields:[
+    {id:'preludeSong', label:'Prelude', type:'text'},
+    {id:'openingSong', label:'Opening song', type:'text'},
+    {id:'interludeSong', label:'Musical interlude', type:'text'},
+    {id:'closingSong', label:'Closing song', type:'text'},
+    {id:'avoidSongs', label:'Anything to avoid', type:'text'},
+  ]},
+  { id:'reading', title:'Readings & poems', confirmLabel:'Reading / poem decided', fields:[
+    {id:'readingChoice', label:'Selection', type:'select', options:['','When Great Trees Fall \u2013 Maya Angelou','Rumi \u2013 Goodbyes are only for those who love with their eyes','Scripture passage','Family will choose','Open to Simon\u2019s suggestion','Other']},
+    {id:'readingOther', label:'If other, what', type:'text'},
+  ]},
+  { id:'rituals', title:'Rituals', confirmLabel:'Rituals discussed', fields:[
+    {id:'candleLighting', label:'Candle lighting ceremony (your usual)', type:'checkbox'},
+    {id:'candleWho', label:'Who lights it', type:'text'},
+    {id:'wantsDifferentRitual', label:'Family wants something different instead of the candle ceremony', type:'checkbox'},
+    {id:'otherRitual', label:'What they want instead', type:'text', hint:'Only relevant if the box above is ticked.'},
+    {id:'roseCeremony', label:'Rose ceremony', type:'checkbox'},
+    {id:'roseWho', label:'Who places roses', type:'text'},
+    {id:'slideshow', label:'Photo slideshow', type:'checkbox'},
+  ]},
+  { id:'sensitive', title:'Sensitivities', confirmLabel:'Sensitive topics confirmed', fields:[
+    {id:'avoidTopics', label:'Topics, facts, or names not to raise on stage', type:'textarea', hint:'Write "None" if not applicable.'},
+  ]},
+  { id:'logistics', title:'Logistics', confirmLabel:'Logistics confirmed', fields:[
+    {id:'attendeeCount', label:'Expected attendees', type:'text'},
+    {id:'printedProgram', label:'Printed program needed', type:'checkbox'},
+    {id:'otherNotes', label:'Anything else', type:'textarea'},
+  ]},
+];
+
+let state = {};
+let openSection = 'basics';
+const STORAGE_KEY = 'oos-builder-current';
+
+function slugify(s){
+  return (s||'draft').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'draft';
+}
+
+function renderForm(){
+  const col = document.getElementById('formCol');
+  col.innerHTML = '';
+  SECTIONS.forEach((sec, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'section' + (openSection === sec.id ? ' open' : '');
+    const confirmed = !!state[sec.id + '_confirmed'];
+
+    const head = document.createElement('div');
+    head.className = 'section-head';
+    head.innerHTML = `<span class="section-num">${i+1}</span>
+      <h2>${sec.title}</h2>
+      <span class="section-dot ${confirmed ? 'done' : ''}"></span>
+      <span class="chevron">\u25B8</span>`;
+    head.onclick = () => { openSection = (openSection === sec.id ? null : sec.id); renderForm(); };
+    wrap.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'section-body';
+
+    sec.fields.forEach(f => {
+      const lbl = document.createElement('label');
+      lbl.textContent = f.label;
+
+      if (f.type === 'checkbox'){
+        const row = document.createElement('div');
+        row.className = 'check-row';
+        const inp = document.createElement('input');
+        inp.type = 'checkbox';
+        inp.checked = !!state[f.id];
+        inp.id = 'f_' + f.id;
+        inp.onchange = () => { state[f.id] = inp.checked; save(); renderOrder(); renderChecklist(); };
+        const l2 = document.createElement('label');
+        l2.setAttribute('for', 'f_' + f.id);
+        l2.textContent = f.label;
+        row.appendChild(inp); row.appendChild(l2);
+        body.appendChild(row);
+        return;
+      }
+
+      body.appendChild(lbl);
+      let inp;
+      if (f.type === 'textarea'){
+        inp = document.createElement('textarea');
+      } else if (f.type === 'select'){
+        inp = document.createElement('select');
+        f.options.forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = o; opt.textContent = o || 'Choose one\u2026';
+          inp.appendChild(opt);
+        });
+      } else {
+        inp = document.createElement('input');
+        inp.type = 'text';
+      }
+      inp.value = state[f.id] || '';
+      inp.oninput = () => { state[f.id] = inp.value; save(); renderOrder(); renderChecklist(); updateHeaderName(); };
+      body.appendChild(inp);
+
+      if (f.hint){
+        const h = document.createElement('div');
+        h.className = 'hint';
+        h.textContent = f.hint;
+        body.appendChild(h);
+      }
+    });
+
+    const confirmRow = document.createElement('div');
+    confirmRow.className = 'confirm-row';
+    const cInp = document.createElement('input');
+    cInp.type = 'checkbox';
+    cInp.checked = confirmed;
+    cInp.id = 'confirm_' + sec.id;
+    cInp.onchange = () => { state[sec.id + '_confirmed'] = cInp.checked; save(); renderForm(); renderChecklist(); };
+    const cLbl = document.createElement('label');
+    cLbl.setAttribute('for', 'confirm_' + sec.id);
+    cLbl.textContent = sec.confirmLabel;
+    confirmRow.appendChild(cInp); confirmRow.appendChild(cLbl);
+    body.appendChild(confirmRow);
+
+    wrap.appendChild(body);
+    col.appendChild(wrap);
+  });
+}
+
+function parseSpeakers(){
+  const raw = state.speakers || '';
+  return raw.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
+    const parts = line.split('\u2013').map(p => p.trim());
+    return { name: parts[0] || line, relationship: parts[1] || '', topic: parts[2] || '' };
+  });
+}
+
+function item(label, detail, placeholder){
+  const hasDetail = detail && detail.trim();
+  return { label, detail: hasDetail ? detail : (placeholder ? placeholder : ''), missing: !hasDetail };
+}
+
+function renderOrder(){
+  const list = document.getElementById('orderList');
+  list.innerHTML = '';
+  const rows = [];
+
+  rows.push(item('Prelude', state.preludeSong, '[Prelude song TBD]'));
+  rows.push(item('Opening song', state.openingSong, '[Opening song TBD]'));
+  if (state.candleLighting && !state.wantsDifferentRitual){
+    rows.push(item('Candle lighting', state.candleWho ? 'Lit by ' + state.candleWho : '', '[Who lights the candle?]'));
+  }
+  if (state.wantsDifferentRitual){
+    rows.push(item('Opening ritual (in place of candle lighting)', state.otherRitual, '[What does the family want instead?]'));
+  }
+  rows.push(item('Welcome', 'Simon Ratcliffe'));
+
+  const speakers = parseSpeakers();
+  if (speakers.length){
+    speakers.forEach(s => {
+      rows.push(item('Eulogy / remarks', [s.name, s.relationship, s.topic].filter(Boolean).join(' \u2013 ')));
+    });
+  } else {
+    rows.push(item('Eulogy / remarks', '', '[Speakers not yet confirmed]'));
+  }
+
+  if (state.interludeSong){
+    rows.push(item('Musical interlude', state.interludeSong));
+  }
+
+  let readingLabel = state.readingChoice === 'Other' ? state.readingOther : state.readingChoice;
+  rows.push(item('Reflection & reading', readingLabel, '[Reading not yet chosen]'));
+
+  if (state.roseCeremony){
+    rows.push(item('Rose ceremony', state.roseWho ? 'Placed by ' + state.roseWho : '', '[Who places the roses?]'));
+  }
+  if (state.slideshow){
+    rows.push(item('Photo slideshow', ''));
+  }
+
+  rows.push(item('Final thoughts & blessing', 'Simon Ratcliffe'));
+  rows.push(item('Closing song', state.closingSong, '[Closing song TBD]'));
+
+  rows.forEach((r, i) => {
+    const li = document.createElement('li');
+    li.className = 'order-item';
+    li.innerHTML = `<span class="order-idx">${i+1}</span>
+      <div class="order-main">
+        <strong>${r.label}</strong>
+        <span class="${r.missing ? 'placeholder-tag' : ''}">${r.detail || ''}</span>
+      </div>`;
+    list.appendChild(li);
+  });
+}
+
+function renderChecklist(){
+  const items = SECTIONS.map(s => ({
+    label: s.confirmLabel,
+    done: !!state[s.id + '_confirmed'],
+  }));
+  const doneCount = items.filter(i => i.done).length;
+  document.getElementById('progressFill').style.width = (doneCount / items.length * 100) + '%';
+  document.getElementById('progressText').textContent = `${doneCount} of ${items.length} topics covered`;
+
+  const ul = document.getElementById('checklistUl');
+  ul.innerHTML = '';
+  items.forEach(i => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="ck-icon ${i.done ? 'done' : 'todo'}">${i.done ? '\u2713' : '\u25CB'}</span>
+      <span class="${i.done ? 'ck-done-text' : ''}">${i.label}</span>`;
+    ul.appendChild(li);
+  });
+}
+
+function updateHeaderName(){
+  const el = document.getElementById('deceasedName');
+  if (document.activeElement !== el) el.value = state.fullName || '';
+}
+
+function compileText(){
+  let out = `ORDER OF SERVICE INTAKE \u2014 ${state.fullName || 'Unnamed service'}\n\n`;
+  SECTIONS.forEach(sec => {
+    out += `${sec.title.toUpperCase()}\n`;
+    sec.fields.forEach(f => {
+      let val = state[f.id];
+      if (f.type === 'checkbox') val = val ? 'Yes' : 'No';
+      out += `${f.label}: ${val || '(not provided)'}\n`;
+    });
+    out += '\n';
+  });
+  return out;
+}
+
+document.getElementById('copyBtn').onclick = () => {
+  const text = compileText();
+  navigator.clipboard.writeText(text).then(() => {
+    const note = document.getElementById('savedNote');
+    note.textContent = 'Copied \u2014 ready to turn into the full script.';
+    setTimeout(() => note.textContent = '', 4000);
+  });
+};
+
+document.getElementById('newBtn').onclick = () => {
+  const slug = slugify(state.fullName);
+  try {
+    localStorage.setItem('oos-archive:' + slug + ':' + Date.now(), JSON.stringify(state));
+  } catch(e){}
+  state = {};
+  openSection = 'basics';
+  document.getElementById('deceasedName').value = '';
+  save();
+  renderForm(); renderOrder(); renderChecklist();
+  const note = document.getElementById('savedNote');
+  note.textContent = 'Saved. Ready for the next family.';
+  setTimeout(() => note.textContent = '', 4000);
+};
+
+document.getElementById('deceasedName').oninput = (e) => {
+  state.fullName = e.target.value;
+  save(); renderOrder(); renderChecklist();
+  const firstField = document.getElementById('f_fullName');
+};
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+  };
+});
+
+let saveTimer;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch(e){}
+  }, 400);
+}
+
+function load(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) state = JSON.parse(raw);
+  } catch(e){}
+  document.getElementById('deceasedName').value = state.fullName || '';
+  renderForm();
+  renderOrder();
+  renderChecklist();
+}
+
+load();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "Order of Service Builder",
+  "short_name": "OoS Builder",
+  "start_url": "./oos-builder.html",
+  "display": "standalone",
+  "background_color": "#F5F1E9",
+  "theme_color": "#8A4E62",
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
