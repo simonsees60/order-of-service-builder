@@ -255,8 +255,33 @@
   }
   .copy-btn{background:var(--rose);color:#fff;}
   .copy-btn:active{background:var(--rose-deep);}
-  .new-btn{background:transparent;border:1px solid var(--line);color:var(--ink-soft);margin-top:8px;}
+  .new-btn{background:transparent;border:1px solid var(--line);color:var(--ink-soft);width:100%;margin-top:0;}
+  .family-actions{display:flex;gap:8px;margin-top:8px;}
+  .family-actions .new-btn{margin-top:0;}
   .saved-note{font-size:11px;color:var(--sage);margin-top:8px;text-align:center;height:14px;}
+
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(43,41,38,.45);
+    display:flex;align-items:center;justify-content:center;
+    padding:20px;z-index:50;
+  }
+  .modal-backdrop[hidden]{display:none;}
+  .family-panel{
+    background:var(--card);border-radius:10px;padding:18px;
+    max-width:420px;width:100%;max-height:80vh;overflow-y:auto;
+  }
+  .family-panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .family-panel-head strong{font-family:'Fraunces',serif;font-size:16px;}
+  .family-panel-close{background:none;border:none;font-size:22px;color:var(--ink-soft);cursor:pointer;line-height:1;padding:0 4px;}
+  .family-list{list-style:none;margin:0;padding:0;}
+  .family-list li{display:flex;align-items:center;gap:6px;padding:8px 2px;border-bottom:1px solid var(--line);}
+  .family-list li:last-child{border-bottom:none;}
+  .family-row-main{flex:1;min-width:0;text-align:left;background:none;border:none;cursor:pointer;padding:4px 2px;font-family:inherit;}
+  .family-row-main strong{display:block;font-size:14px;color:var(--ink);}
+  .family-row-main span{display:block;font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .family-row-main.current strong{color:var(--rose-deep);}
+  .family-delete{background:none;border:none;color:var(--todo);font-size:12.5px;cursor:pointer;padding:6px;flex-shrink:0;}
+  .family-empty{color:var(--ink-soft);font-size:13px;padding:10px 2px;}
 </style>
 </head>
 <body>
@@ -289,9 +314,22 @@
       </div>
 
       <button class="copy-btn" id="copyBtn">Copy for the full script</button>
-      <button class="new-btn" id="newBtn">Save & start next family</button>
+      <div class="family-actions">
+        <button class="new-btn" id="newBtn">Save & start next family</button>
+        <button class="new-btn" id="openBtn">Open a family</button>
+      </div>
       <div class="saved-note" id="savedNote"></div>
     </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="familyModal" hidden>
+  <div class="family-panel">
+    <div class="family-panel-head">
+      <strong>Saved families</strong>
+      <button type="button" class="family-panel-close" id="familyPanelClose" aria-label="Close">&times;</button>
+    </div>
+    <ul class="family-list" id="familyList"></ul>
   </div>
 </div>
 
@@ -359,10 +397,47 @@ const SECTIONS = [
 
 let state = {};
 let openSection = 'basics';
-const STORAGE_KEY = 'oos-builder-current';
+let currentId = null;
 
-function slugify(s){
-  return (s||'draft').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'draft';
+const OLD_STORAGE_KEY = 'oos-builder-current';
+const INDEX_KEY = 'oos-index';
+const CURRENT_ID_KEY = 'oos-current-id';
+const familyKey = (id) => 'oos-family:' + id;
+
+function newId(){
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function loadIndex(){
+  try { return JSON.parse(localStorage.getItem(INDEX_KEY)) || []; } catch(e){ return []; }
+}
+
+function saveIndex(idx){
+  try { localStorage.setItem(INDEX_KEY, JSON.stringify(idx)); } catch(e){}
+}
+
+function upsertIndexEntry(id, name){
+  const idx = loadIndex();
+  const entry = idx.find(f => f.id === id);
+  const updatedAt = Date.now();
+  if (entry){ entry.name = name || 'Unnamed service'; entry.updatedAt = updatedAt; }
+  else idx.push({ id, name: name || 'Unnamed service', updatedAt });
+  saveIndex(idx);
+}
+
+function removeIndexEntry(id){
+  saveIndex(loadIndex().filter(f => f.id !== id));
+}
+
+function relativeTime(ts){
+  if (!ts) return '';
+  const mins = Math.round((Date.now() - ts) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + ' min ago';
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return hrs + (hrs === 1 ? ' hour ago' : ' hours ago');
+  const days = Math.round(hrs / 24);
+  return days + (days === 1 ? ' day ago' : ' days ago');
 }
 
 function renderForm(){
@@ -664,18 +739,24 @@ document.getElementById('copyBtn').onclick = () => {
 };
 
 document.getElementById('newBtn').onclick = () => {
-  const slug = slugify(state.fullName);
-  try {
-    localStorage.setItem('oos-archive:' + slug + ':' + Date.now(), JSON.stringify(state));
-  } catch(e){}
-  state = {};
-  openSection = 'basics';
-  document.getElementById('deceasedName').value = '';
-  save();
-  renderForm(); renderOrder(); renderChecklist();
+  startNewFamily();
   const note = document.getElementById('savedNote');
   note.textContent = 'Saved. Ready for the next family.';
   setTimeout(() => note.textContent = '', 4000);
+};
+
+document.getElementById('openBtn').onclick = () => {
+  flushSave();
+  renderOpenList();
+  document.getElementById('familyModal').hidden = false;
+};
+
+document.getElementById('familyPanelClose').onclick = () => {
+  document.getElementById('familyModal').hidden = true;
+};
+
+document.getElementById('familyModal').onclick = (e) => {
+  if (e.target.id === 'familyModal') document.getElementById('familyModal').hidden = true;
 };
 
 document.getElementById('deceasedName').oninput = (e) => {
@@ -693,21 +774,108 @@ document.querySelectorAll('.tab').forEach(tab => {
   };
 });
 
+function persistCurrentFamily(){
+  if (!currentId) return;
+  try {
+    localStorage.setItem(familyKey(currentId), JSON.stringify(state));
+    localStorage.setItem(CURRENT_ID_KEY, currentId);
+  } catch(e){}
+  upsertIndexEntry(currentId, state.fullName);
+}
+
 let saveTimer;
 function save(){
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch(e){}
-  }, 400);
+  saveTimer = setTimeout(persistCurrentFamily, 400);
+}
+
+function flushSave(){
+  clearTimeout(saveTimer);
+  persistCurrentFamily();
+}
+
+function startNewFamily(){
+  flushSave();
+  currentId = newId();
+  state = {};
+  openSection = 'basics';
+  document.getElementById('deceasedName').value = '';
+  renderForm(); renderOrder(); renderChecklist();
+}
+
+function openFamily(id){
+  const raw = localStorage.getItem(familyKey(id));
+  if (!raw) return;
+  flushSave();
+  try { state = JSON.parse(raw); } catch(e){ state = {}; }
+  currentId = id;
+  try { localStorage.setItem(CURRENT_ID_KEY, currentId); } catch(e){}
+  openSection = 'basics';
+  document.getElementById('deceasedName').value = state.fullName || '';
+  document.getElementById('familyModal').hidden = true;
+  renderForm(); renderOrder(); renderChecklist();
+}
+
+function deleteFamily(id){
+  try { localStorage.removeItem(familyKey(id)); } catch(e){}
+  removeIndexEntry(id);
+  if (id === currentId){
+    currentId = newId();
+    state = {};
+    openSection = 'basics';
+    document.getElementById('deceasedName').value = '';
+    renderForm(); renderOrder(); renderChecklist();
+  }
+  renderOpenList();
+}
+
+function renderOpenList(){
+  const ul = document.getElementById('familyList');
+  ul.innerHTML = '';
+  const idx = loadIndex().sort((a, b) => b.updatedAt - a.updatedAt);
+
+  if (!idx.length){
+    ul.innerHTML = '<li class="family-empty">No saved families yet.</li>';
+    return;
+  }
+
+  idx.forEach(f => {
+    const isCurrent = f.id === currentId;
+    const li = document.createElement('li');
+    li.innerHTML = `<button type="button" class="family-row-main${isCurrent ? ' current' : ''}" data-id="${f.id}">
+        <strong>${f.name || 'Unnamed service'}${isCurrent ? ' (current)' : ''}</strong>
+        <span>Last edited ${relativeTime(f.updatedAt)}</span>
+      </button>
+      <button type="button" class="family-delete" data-id="${f.id}">Delete</button>`;
+    ul.appendChild(li);
+  });
+
+  ul.querySelectorAll('.family-row-main').forEach(btn => {
+    btn.onclick = () => openFamily(btn.dataset.id);
+  });
+  ul.querySelectorAll('.family-delete').forEach(btn => {
+    btn.onclick = () => {
+      if (confirm('Delete this saved family? This cannot be undone.')) deleteFamily(btn.dataset.id);
+    };
+  });
 }
 
 function load(){
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) state = JSON.parse(raw);
-  } catch(e){}
+  currentId = localStorage.getItem(CURRENT_ID_KEY);
+  if (currentId && localStorage.getItem(familyKey(currentId))){
+    try { state = JSON.parse(localStorage.getItem(familyKey(currentId))); } catch(e){ state = {}; }
+  } else {
+    // No current family yet -- migrate an older single-draft save if one exists, so nothing is lost.
+    let migrated = null;
+    try {
+      const oldRaw = localStorage.getItem(OLD_STORAGE_KEY);
+      if (oldRaw) migrated = JSON.parse(oldRaw);
+    } catch(e){}
+    currentId = newId();
+    state = migrated || {};
+    if (migrated) persistCurrentFamily();
+    else { try { localStorage.setItem(CURRENT_ID_KEY, currentId); } catch(e){} }
+  }
   document.getElementById('deceasedName').value = state.fullName || '';
   renderForm();
   renderOrder();
