@@ -1,4 +1,4 @@
-const CACHE_NAME = 'oos-builder-v1';
+const CACHE_NAME = 'oos-builder-v2';
 const ASSETS = [
   './',
   './oos-builder.html',
@@ -15,8 +15,13 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  // cache.addAll() is all-or-nothing: one flaky download sinks every asset.
+  // Caching each file separately means a single failure only costs that file --
+  // it'll get picked up by the fetch handler's cache-on-success fallback later.
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.allSettled(ASSETS.map((url) => cache.add(url)))
+    )
   );
   self.skipWaiting();
 });
