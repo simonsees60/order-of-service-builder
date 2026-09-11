@@ -61,6 +61,18 @@
     color:var(--ink);
   }
   header input#deceasedName:focus{outline:none;border-bottom-color:var(--rose);}
+  header input#celebrantName{
+    font-family:'Work Sans',sans-serif;
+    font-size:12px;
+    border:none;
+    border-bottom:1px solid var(--line);
+    background:transparent;
+    padding:4px 2px;
+    min-width:130px;
+    text-align:right;
+    color:var(--ink-soft);
+  }
+  header input#celebrantName:focus{outline:none;border-bottom-color:var(--rose);}
   .layout{
     display:flex;
     flex:1;
@@ -310,7 +322,8 @@
   <header>
     <h1>Order of Service Builder</h1>
     <input id="deceasedName" placeholder="Who is this service for?">
-    <div class="sub">Fills in live as you talk with the family</div>
+    <div class="sub">Fills in live as you talk with the family — everything stays on this device, worth mentioning to them.</div>
+    <input id="celebrantName" placeholder="Your name">
   </header>
 
   <div class="layout">
@@ -432,6 +445,16 @@ const INDEX_KEY = 'oos-index';
 const CURRENT_ID_KEY = 'oos-current-id';
 const familyKey = (id) => 'oos-family:' + id;
 const photoKey = (id) => 'oos-photo:' + id;
+const CELEBRANT_NAME_KEY = 'oos-celebrant-name';
+
+// The celebrant's own name is a device-wide setting, not tied to any one
+// family, so it lives in its own key rather than inside `state`.
+function getCelebrantName(){
+  try { return localStorage.getItem(CELEBRANT_NAME_KEY) || ''; } catch(e){ return ''; }
+}
+function setCelebrantName(name){
+  try { localStorage.setItem(CELEBRANT_NAME_KEY, name); } catch(e){}
+}
 
 function newId(){
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -678,6 +701,8 @@ function item(key, label, detail, placeholder){
 
 function buildOrderRows(){
   const rows = [];
+  const celebrantName = getCelebrantName();
+  const celebrantPlaceholder = '[Add your name — top right of the page]';
 
   rows.push(item('prelude', 'Prelude', state.preludeSong, '[Prelude song TBD]'));
   rows.push(item('openingSong', 'Opening song', state.openingSong, '[Opening song TBD]'));
@@ -687,7 +712,7 @@ function buildOrderRows(){
   if (state.wantsDifferentRitual){
     rows.push(item('openingRitual', 'Opening ritual (in place of candle lighting)', state.otherRitual, '[What does the family want instead?]'));
   }
-  rows.push(item('welcome', 'Welcome', 'Simon Ratcliffe'));
+  rows.push(item('welcome', 'Welcome', celebrantName, celebrantPlaceholder));
 
   const speakers = parseSpeakers();
   if (speakers.length){
@@ -712,7 +737,7 @@ function buildOrderRows(){
     rows.push(item('slideshow', 'Photo slideshow', ''));
   }
 
-  rows.push(item('finalThoughts', 'Final thoughts & blessing', 'Simon Ratcliffe'));
+  rows.push(item('finalThoughts', 'Final thoughts & blessing', celebrantName, celebrantPlaceholder));
   rows.push(item('closingSong', 'Closing song', state.closingSong, '[Closing song TBD]'));
 
   return rows;
@@ -913,7 +938,7 @@ function exportAllFamilies(){
     const photo = localStorage.getItem(photoKey(f.id));
     return { id: f.id, state: familyState, photo: photo || null };
   });
-  const payload = { app: 'oos-builder', version: 1, exportedAt: Date.now(), families };
+  const payload = { app: 'oos-builder', version: 1, exportedAt: Date.now(), celebrantName: getCelebrantName(), families };
   const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -947,6 +972,13 @@ function importFamiliesFromFile(file){
         count++;
       } catch(e){}
     });
+    // Only adopt the imported celebrant name if this device doesn't already have one set,
+    // so importing someone else's file never silently overwrites your own name.
+    if (payload.celebrantName && !getCelebrantName()){
+      setCelebrantName(payload.celebrantName);
+      document.getElementById('celebrantName').value = payload.celebrantName;
+      renderOrder();
+    }
     showImportStatus(`Imported ${count} famil${count === 1 ? 'y' : 'ies'}.`);
     renderOpenList();
   };
@@ -1121,6 +1153,12 @@ function load(){
 }
 
 load();
+
+document.getElementById('celebrantName').value = getCelebrantName();
+document.getElementById('celebrantName').oninput = (e) => {
+  setCelebrantName(e.target.value);
+  renderOrder();
+};
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
